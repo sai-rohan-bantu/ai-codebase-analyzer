@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Cloned repos for analysis (VERY IMPORTANT)
+repos/
+
+# Virtual Environment (VERY IMPORTANT)
+venv/
+.env/
+.venv/
+
+# Data & Index files (for RAG)
+data/
+*.faiss
+*.pkl
+*.index
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
