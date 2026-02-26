@@ -1,39 +1,42 @@
-# ---- Base Image (lightweight + stable for FAISS & transformers)
+# ---- Lightweight base (best balance for transformers + FAISS)
 FROM python:3.10-slim
 
-# Environment settings (important for production logs)
+# ---- Environment (IMPORTANT for streaming + logs)
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+ENV PYTHONIOENCODING=UTF-8
 
-# Set working directory inside container
+# ---- Working directory
 WORKDIR /app
 
-# Install system dependencies (CRITICAL for your project)
-# git -> needed for GitHub repo ingestion
-# build-essential -> needed for faiss & some python wheels
+# ---- System deps (required for your project)
 RUN apt-get update && apt-get install -y \
     git \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (for better Docker caching)
+# ---- Copy requirements first (Docker cache optimization)
 COPY requirements.txt .
 
-# Upgrade pip and install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+# ---- Install dependencies (NO CACHE = saves GBs of space)
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy entire project (app, ui, main.py)
+# ---- Copy full project
 COPY . .
 
-# Create persistent directories for RAG storage
-# (prevents runtime folder errors)
-RUN mkdir -p repos indexes
+# ---- Create persistent dirs (RAG indexing safety)
+RUN mkdir -p /app/repos /app/indexes
 
-# Expose FastAPI port
+# ---- Expose FastAPI port
 EXPOSE 8000
 
-# Start FastAPI (production safe)
-# 0.0.0.0 is REQUIRED for Docker hosting
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# ---- Production start (CRITICAL for streaming)
+# h11 = disables buffering (fixes streaming issue you faced)
+CMD ["uvicorn", "main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--http", "h11", \
+     "--workers", "1"]

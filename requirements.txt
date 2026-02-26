@@ -1,10 +1,10 @@
 fastapi
-uvicorn
+uvicorn[standard]
 gitpython
 python-dotenv
 requests
 pydantic
-sentence-transformers
 faiss-cpu
 tree-sitter==0.20.1
 tree-sitter-languages==1.10.2
+sentence-transformers
