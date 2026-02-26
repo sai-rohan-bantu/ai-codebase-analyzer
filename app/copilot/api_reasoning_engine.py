@@ -20,7 +20,7 @@ class APICopilotReasoningEngine:
     def __init__(self):
         self.api_key = os.getenv("OPENROUTER_API_KEY")
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
-        self.model = "deepseek/deepseek-chat"  # Free + good for code reasoning
+        self.model = "deepseek/deepseek-r1:free"  # Free + good for code reasoning
 
         if not self.api_key:
             raise ValueError("OPENROUTER_API_KEY not set in .env file")
