@@ -1,67 +1,82 @@
-from app.ingestion.pipeline import IngestionPipeline
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from app.api.routes import router
+
+app = FastAPI(
+    title="AI Codebase Analyzer Copilot",
+    version="1.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Backend APIs
+app.include_router(router, prefix="/api")
+
+# Serve UI automatically at root
+app.mount("/", StaticFiles(directory="ui", html=True), name="ui")
 
 
-def test_github_ingestion_and_chunking():
-    """
-    End-to-End Test:
-    GitHub Repo → Ingestion → AST Chunking → Semantic Chunks
-    """
-
-    # Use a real repo (you already cloned similar)
-    repo_url = "https://github.com/sai-rohan-bantu/SystemDesign-LLD-Behavioural"
-
-    print("\n[TEST] Starting GitHub ingestion + chunking test...\n")
-
-    pipeline = IngestionPipeline()
-    chunks = pipeline.ingest_from_github(repo_url)
-
-    # 1️⃣ Basic sanity check
-    print(f"\n[RESULT] Total Chunks Generated: {len(chunks)}")
-
-    if not chunks:
-        print("[ERROR] No chunks generated!")
-        return
-
-    # 2️⃣ Print first 3 chunks for inspection
-    print("\n[DEBUG] Sample Chunk Metadata:\n")
-    for i, chunk in enumerate(chunks[:10]):
-        print(f"Chunk {i+1} Metadata:")
-        print(chunk["metadata"])
-        print("-" * 50)
-
-    # 3️⃣ Check if AST chunking is working
-    ast_chunks = [
-        c for c in chunks
-        if c["metadata"].get("chunking_strategy") == "ast_semantic"
-    ]
-
-    fallback_chunks = [
-        c for c in chunks
-        if c["metadata"].get("chunking_strategy") == "fallback_text"
-    ]
-
-    print(f"\n[ANALYSIS]")
-    print(f"AST Semantic Chunks: {len(ast_chunks)}")
-    print(f"Fallback Chunks: {len(fallback_chunks)}")
-
-    # 4️⃣ Critical validation: Metadata preservation
-    sample_meta = chunks[0]["metadata"]
-
-    required_fields = [
-        "file_path",
-        "language",
-        "repo",
-        "chunk_type",
-        "chunking_strategy"
-    ]
-
-    missing = [field for field in required_fields if field not in sample_meta]
-
-    if missing:
-        print(f"[WARNING] Missing metadata fields: {missing}")
-    else:
-        print("[SUCCESS] Metadata enrichment is correct ✔")
 
 
-if __name__ == "__main__":
-    test_github_ingestion_and_chunking()
+# from fastapi import FastAPI
+# from fastapi.middleware.cors import CORSMiddleware
+
+# # Import your API routes (we created earlier)
+# from app.api.routes import router
+# from fastapi.staticfiles import StaticFiles
+# import webbrowser
+# import threading
+
+# app = FastAPI(
+#     title="AI Codebase Analyzer Copilot",
+#     description="Repo-Agnostic AI Codebase Analyzer with RAG + Streaming + OpenRouter",
+#     version="1.0.0"
+# )
+
+# def open_browser():
+#     webbrowser.open("http://127.0.0.1:8000")
+
+# @app.on_event("startup")
+# def startup_event():
+#     threading.Timer(1.5, open_browser).start()
+
+# # Enable CORS (important for future UI like React)
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# # Register all API endpoints
+# app.include_router(router, prefix="/api")
+
+# app.mount("/", StaticFiles(directory="ui", html=True), name="ui")
+
+# @app.get("/")
+# def root():
+#     return {
+#         "message": "AI Codebase Copilot API is running 🚀",
+#         "features": [
+#             "Async Repo Ingestion",
+#             "Streaming Copilot Chat",
+#             "RAG + FAISS Indexing",
+#             "OpenRouter LLM Integration"
+#         ]
+#     }
+
+
+# @app.get("/health")
+# def health_check():
+#     return {
+#         "status": "healthy",
+#         "service": "ai-codebase-analyzer"
+#     }

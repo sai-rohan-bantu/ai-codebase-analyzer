@@ -1,15 +1,3 @@
-"""
-GitHub Repository Loader
-
-Responsibilities:
-- Clone GitHub repositories
-- Manage local workspace
-- Prepare repos for analysis pipeline
-
-Industry Pattern:
-Source Connector Layer (used in enterprise RAG systems)
-"""
-
 import shutil
 from pathlib import Path
 from git import Repo

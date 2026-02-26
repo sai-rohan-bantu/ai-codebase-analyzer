@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Codebase Copilot</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      display: flex;
+      height: 100vh;
+      background: #0f172a;
+      color: #e2e8f0;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: #020617;
+      border-right: 1px solid #1e293b;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: #38bdf8;
+    }
+
+    .logo img {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+    }
+
+    .repo-list {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .repo-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      background: #0f172a;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+      font-size: 14px;
+    }
+
+    .repo-item:hover {
+      background: #1e293b;
+      border-color: #334155;
+    }
+
+    .repo-item.active {
+      background: #1e293b;
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3);
+    }
+
+    .repo-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .delete-btn {
+      background: transparent;
+      border: none;
+      color: #ef4444;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      transition: 0.15s ease;
+    }
+
+    .delete-btn:hover {
+      background: rgba(239, 68, 68, 0.15);
+    }
+
+    /* Main */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 24px;
+      border-bottom: 1px solid #1e293b;
+      font-size: 18px;
+      font-weight: 600;
+      background: #020617;
+    }
+
+    .header img {
+      width: 28px;
+      height: 28px;
+    }
+
+    .upload-container {
+      padding: 18px 20px;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      gap: 10px;
+      background: #020617;
+    }
+
+    .upload-container input {
+      flex: 1;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: white;
+      outline: none;
+      font-size: 14px;
+    }
+
+    .upload-container input:focus {
+      border-color: #38bdf8;
+    }
+
+    .upload-container button {
+      padding: 12px 18px;
+      border-radius: 10px;
+      border: none;
+      background: #38bdf8;
+      color: #020617;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .upload-container button:hover {
+      background: #0ea5e9;
+    }
+
+    .chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      overflow: hidden;
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-right: 6px;
+    }
+
+    .message {
+      padding: 12px 14px;
+      border-radius: 12px;
+      max-width: 80%;
+      line-height: 1.5;
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .user {
+      background: #38bdf8;
+      color: #020617;
+      align-self: flex-end;
+      font-weight: 500;
+    }
+
+    .bot {
+      background: #1e293b;
+      color: #e2e8f0;
+      align-self: flex-start;
+    }
+
+    .system {
+      background: #020617;
+      border: 1px dashed #334155;
+      color: #94a3b8;
+      align-self: center;
+      font-size: 12px;
+    }
+
+    .chat-input {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .chat-input input {
+      flex: 1;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: white;
+      outline: none;
+      font-size: 14px;
+    }
+
+    .chat-input input:focus {
+      border-color: #22c55e;
+    }
+
+    .chat-input button {
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: none;
+      background: #22c55e;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .chat-input button:hover {
+      background: #16a34a;
+    }
+
+    .status {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="logo">
+      <img src="https://cdn-icons-png.flaticon.com/512/4712/4712109.png" alt="AI" />
+      Codebase Copilot
+    </div>
+    <div class="repo-list" id="repoList"></div>
+  </div>
+
+  <div class="main">
+    <div class="header">
+      <img src="https://cdn-icons-png.flaticon.com/512/1055/1055687.png" alt="Analyzer" />
+      AI Codebase Analyzer
+    </div>
+
+    <div class="upload-container">
+      <input
+        type="text"
+        id="repoUrl"
+        placeholder="Paste GitHub repository URL (e.g. https://github.com/user/repo)"
+      />
+      <button id="ingestBtn">Ingest</button>
+    </div>
+
+    <div class="chat-container">
+      <div class="messages" id="messages"></div>
+
+      <div class="chat-input">
+        <input
+          type="text"
+          id="chatInput"
+          placeholder="Ask questions about the selected codebase..."
+        />
+        <button id="sendBtn">Send</button>
+      </div>
+
+      <div class="status" id="statusText">No repository selected</div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = `${window.location.origin}/api`;
+
+    let activeRepoId = null;
+
+    const messagesEl = document.getElementById("messages");
+    const statusText = document.getElementById("statusText");
+    const repoList = document.getElementById("repoList");
+    const chatInput = document.getElementById("chatInput");
+    const ingestBtn = document.getElementById("ingestBtn");
+    const sendBtn = document.getElementById("sendBtn");
+
+    function addMessage(content, type = "bot") {
+      const msg = document.createElement("div");
+      msg.className = `message ${type}`;
+      msg.textContent = content;
+      messagesEl.appendChild(msg);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function getRepoName(url) {
+      try {
+        const clean = url.replace(/\/+$/, "");
+        return clean.split("/").pop().replace(".git", "");
+      } catch {
+        return url;
+      }
+    }
+
+    async function ingestRepo() {
+      const repoUrl = document.getElementById("repoUrl").value.trim();
+      if (!repoUrl) return alert("Please enter a GitHub repository URL");
+
+      ingestBtn.disabled = true;
+      statusText.textContent = "Starting ingestion...";
+
+      try {
+        const response = await fetch(`${API_BASE}/ingest`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo_url: repoUrl })
+        });
+
+        const data = await response.json();
+        if (!data.repo_id) throw new Error("Invalid API response");
+
+        activeRepoId = data.repo_id;
+        addRepoTab(activeRepoId, repoUrl);
+        setActiveRepo(activeRepoId);
+
+        addMessage(`Repository ingestion started: ${getRepoName(repoUrl)}`, "system");
+        statusText.textContent = `Indexing: ${data.repo_id}`;
+      } catch (error) {
+        console.error("Ingestion Error:", error);
+        addMessage("Failed to ingest repository.", "system");
+        statusText.textContent = "Ingestion failed";
+      } finally {
+        ingestBtn.disabled = false;
+      }
+    }
+
+    function addRepoTab(repoId, repoUrl) {
+      const repoItem = document.createElement("div");
+      repoItem.className = "repo-item";
+      repoItem.dataset.repoId = repoId;
+
+      const name = document.createElement("span");
+      name.className = "repo-name";
+      name.textContent = getRepoName(repoUrl);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "delete-btn";
+      deleteBtn.textContent = "✕";
+      deleteBtn.title = "Remove tab";
+
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (activeRepoId === repoId) {
+          activeRepoId = null;
+          statusText.textContent = "No repository selected";
+        }
+        repoItem.remove();
+        addMessage(`Removed repo tab: ${name.textContent}`, "system");
+      };
+
+      repoItem.onclick = () => setActiveRepo(repoId, repoItem);
+
+      repoItem.appendChild(name);
+      repoItem.appendChild(deleteBtn);
+      repoList.appendChild(repoItem);
+    }
+
+    function setActiveRepo(repoId, element) {
+      activeRepoId = repoId;
+      statusText.textContent = `Active Repo: ${repoId}`;
+
+      document.querySelectorAll(".repo-item").forEach(el => el.classList.remove("active"));
+      if (element) element.classList.add("active");
+    }
+
+    async function sendMessage() {
+      const query = chatInput.value.trim();
+      if (!query) return;
+      if (!activeRepoId) return alert("Please ingest and select a repository first.");
+
+      addMessage(query, "user");
+      chatInput.value = "";
+
+      const botMsg = document.createElement("div");
+      botMsg.className = "message bot";
+      botMsg.textContent = "Thinking...";
+      messagesEl.appendChild(botMsg);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      try {
+        const res = await fetch(`${API_BASE}/chat/stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo_id: activeRepoId, query })
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        botMsg.textContent = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          botMsg.textContent += decoder.decode(value, { stream: true });
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+      } catch (error) {
+        console.error("Chat Error:", error);
+        botMsg.textContent = "Error fetching response from server.";
+      }
+    }
+
+    ingestBtn.addEventListener("click", ingestRepo);
+    sendBtn.addEventListener("click", sendMessage);
+
+    chatInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+
+    addMessage("Welcome! Ingest a GitHub repository to start analyzing the codebase.", "system");
+  </script>
+</body>
+</html>
