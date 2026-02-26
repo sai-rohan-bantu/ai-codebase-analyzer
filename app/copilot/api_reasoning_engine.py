@@ -1,32 +1,54 @@
 import os
+import json
 import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Generator
 from dotenv import load_dotenv
 
+# Load env BEFORE anything else
 load_dotenv()
 
 
 class APICopilotReasoningEngine:
     """
-    Production API-Based Copilot Reasoning Engine (OpenRouter)
+    Stable OpenRouter Copilot Engine (Production + RAG Optimized)
 
-    Designed specifically for:
-    - RAG pipelines
-    - Codebase analysis
-    - Repo-agnostic systems
-    - FastAPI deployment
+    Fixes:
+    - 401 Missing Authentication
+    - 404 model routing errors
+    - Deprecated model issues
+    - Streaming SSE parsing bugs
     """
 
     def __init__(self):
-        self.api_key = os.getenv("OPENROUTER_API_KEY")
-        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
-        self.model = "deepseek/deepseek-r1:free"  # Free + good for code reasoning
+        # 🔥 Strip prevents newline/space header bugs (Windows common)
+        self.api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
 
         if not self.api_key:
-            raise ValueError("OPENROUTER_API_KEY not set in .env file")
+            raise ValueError(
+                "OPENROUTER_API_KEY not set in .env\n"
+                "Add: OPENROUTER_API_KEY=sk-or-v1-xxxxx"
+            )
+
+        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
+
+        # 🧠 VERY STABLE free models on OpenRouter (non-deprecated)
+        self.primary_model = "deepseek/deepseek-chat"
+        self.fallback_model = "mistralai/mistral-7b-instruct"
+
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            # Required for OpenRouter ranking & routing
+            "HTTP-Referer": "http://localhost:8000",
+            "X-Title": "AI-Codebase-Analyzer"
+        }
+
+        print("🚀 OpenRouter Copilot Initialized")
+        print("🧠 Primary Model:", self.primary_model)
+        print("🔑 Key Loaded:", repr(self.api_key[:10] + "..."))
 
     # =====================================================
-    # MAIN ENTRY (STRICT INPUT / OUTPUT CONTRACT)
+    # MAIN RESPONSE (NON-STREAM)
     # =====================================================
     def generate_response(
         self,
@@ -34,16 +56,6 @@ class APICopilotReasoningEngine:
         retrieved_chunks: List[Dict[str, Any]],
         repo_name: str
     ) -> Dict[str, Any]:
-        """
-        Structured response generator for production APIs.
-
-        Returns:
-        {
-            answer: str,
-            grounded_files: list,
-            context_used: int
-        }
-        """
 
         if not retrieved_chunks:
             return {
@@ -52,57 +64,132 @@ class APICopilotReasoningEngine:
                 "context_used": 0
             }
 
-        context_text = self._format_context(retrieved_chunks)
+        # Limit context for stability + cost
+        selected_chunks = retrieved_chunks[:5]
+        context_text = self._format_context(selected_chunks)
         prompt = self._build_prompt(query, context_text, repo_name)
-        answer = self._call_llm(prompt)
+
+        answer = self._call_with_fallback(prompt)
 
         grounded_files = list({
             chunk["metadata"].get("file_name", "unknown")
-            for chunk in retrieved_chunks
+            for chunk in selected_chunks
         })
 
         return {
             "answer": answer,
             "grounded_files": grounded_files,
-            "context_used": len(retrieved_chunks)
+            "context_used": len(selected_chunks)
         }
 
     # =====================================================
-    # CONTEXT FORMATTER (MATCHES YOUR METADATA STRUCTURE)
+    # STREAMING (COPILOT STYLE)
     # =====================================================
-    def _format_context(self, chunks: List[Dict]) -> str:
-        """
-        Formats chunks using YOUR existing metadata:
-        file_path, file_name, language, start_line, end_line, chunk_type
-        """
-        formatted_blocks = []
+    def stream_response(
+        self,
+        query: str,
+        retrieved_chunks: List[Dict[str, Any]],
+        repo_name: str
+    ) -> Generator[str, None, None]:
 
+        if not retrieved_chunks:
+            yield "No relevant context found in the indexed repository."
+            return
+
+        selected_chunks = retrieved_chunks[:5]
+        context_text = self._format_context(selected_chunks)
+        prompt = self._build_prompt(query, context_text, repo_name)
+
+        payload = {
+            "model": self.primary_model,
+            "messages": [
+                {"role": "system", "content": "You are a professional AI code copilot."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.1,
+            "stream": True,
+            "max_tokens": 900
+        }
+
+        try:
+            with requests.post(
+                self.api_url,
+                headers=self.headers,
+                json=payload,
+                stream=True,
+                timeout=120
+            ) as response:
+
+                if response.status_code != 200:
+                    yield f"\n[Streaming Error {response.status_code}]: {response.text}"
+                    return
+
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+
+                    decoded = line.decode("utf-8")
+
+                    if decoded.startswith("data: "):
+                        data_str = decoded.replace("data: ", "").strip()
+
+                        if data_str == "[DONE]":
+                            break
+
+                        try:
+                            chunk_json = json.loads(data_str)
+                            delta = chunk_json["choices"][0]["delta"].get("content", "")
+                            if delta:
+                                yield delta
+                        except Exception:
+                            continue
+
+        except Exception as e:
+            yield f"\n[Streaming Exception]: {str(e)}"
+
+    # =====================================================
+    # FALLBACK MODEL HANDLER
+    # =====================================================
+    def _call_with_fallback(self, prompt: str) -> str:
+        for model in [self.primary_model, self.fallback_model]:
+            try:
+                return self._call_llm(prompt, model)
+            except Exception as e:
+                print(f"⚠️ Model failed ({model}): {e}")
+                continue
+        return "LLM failed on all available models."
+
+    def _call_llm(self, prompt: str, model: str) -> str:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "You are a professional AI code copilot."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.1,
+            "max_tokens": 900
+        }
+
+        response = requests.post(
+            self.api_url,
+            headers=self.headers,
+            json=payload,
+            timeout=60
+        )
+
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+
+    def _format_context(self, chunks: List[Dict[str, Any]]) -> str:
+        blocks = []
         for i, chunk in enumerate(chunks, 1):
-            metadata = chunk.get("metadata", {})
+            meta = chunk.get("metadata", {})
             content = chunk.get("content", "")
+            blocks.append(f"[CHUNK {i}] File: {meta.get('file_name')}\n{content}")
+        return "\n\n".join(blocks)
 
-            block = f"""
-[CHUNK {i}]
-File: {metadata.get("file_name")}
-Path: {metadata.get("file_path")}
-Language: {metadata.get("language")}
-Chunk Type: {metadata.get("chunk_type")}
-Lines: {metadata.get("start_line", "N/A")} - {metadata.get("end_line", "N/A")}
-
-Code:
-{content}
-"""
-            formatted_blocks.append(block)
-
-        return "\n".join(formatted_blocks)
-
-    # =====================================================
-    # GROUNDED PROMPT (COPILOT STYLE)
-    # =====================================================
     def _build_prompt(self, query: str, context: str, repo_name: str) -> str:
-        """
-        Repo-agnostic, anti-hallucination prompt.
-        """
         return f"""
 You are an expert AI Codebase Analyzer and Copilot.
 
@@ -110,9 +197,8 @@ Repository: {repo_name}
 
 STRICT RULES:
 - Use ONLY the provided repository context
-- Do NOT hallucinate missing files or code
+- Do NOT hallucinate missing files
 - Be precise and technical
-- Support multi-language codebases (Java, Python, JS, HTML, etc.)
 - Explain architecture, design patterns, and flow clearly
 
 USER QUERY:
@@ -120,132 +206,4 @@ USER QUERY:
 
 REPOSITORY CONTEXT:
 {context}
-
-INSTRUCTIONS:
-1. Identify relevant files/classes
-2. Explain the implementation clearly
-3. Reference actual file names when possible
-4. If context is insufficient, say it explicitly
 """
-
-    # =====================================================
-    # OPENROUTER API CALL (DEPLOYMENT SAFE)
-    # =====================================================
-    def _call_llm(self, prompt: str) -> str:
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost",
-            "X-Title": "AI-Codebase-Analyzer"
-        }
-
-        payload = {
-            "model": self.model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a professional code copilot."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "temperature": 0.1,  # LOW = better RAG accuracy
-            "max_tokens": 900
-        }
-
-        try:
-            response = requests.post(
-                self.api_url,
-                headers=headers,
-                json=payload,
-                timeout=60
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-
-        except requests.exceptions.Timeout:
-            return "LLM request timed out."
-        except requests.exceptions.RequestException as e:
-            return f"OpenRouter API error: {str(e)}"
-        except Exception as e:
-            return f"Unexpected error: {str(e)}"
-
-    # =====================================================
-    # STREAMING RESPONSE (COPILOT STYLE)
-    # =====================================================
-    def stream_response(
-        self,
-        query: str,
-        retrieved_chunks: list,
-        repo_name: str
-    ):
-        """
-        Streaming LLM response (Copilot-style).
-        Yields tokens progressively.
-        """
-        if not retrieved_chunks:
-            yield "No relevant context found in the indexed repository."
-            return
-
-        context_text = self._format_context(retrieved_chunks)
-        prompt = self._build_prompt(query, context_text, repo_name)
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost",
-            "X-Title": "AI-Codebase-Analyzer"
-        }
-
-        payload = {
-            "model": self.model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a professional AI code copilot."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "temperature": 0.1,
-            "stream": True  # 🔥 Enables streaming
-        }
-
-        try:
-            with requests.post(
-                self.api_url,
-                headers=headers,
-                json=payload,
-                stream=True,
-                timeout=120
-            ) as response:
-
-                response.raise_for_status()
-
-                for line in response.iter_lines():
-                    if line:
-                        decoded = line.decode("utf-8")
-
-                        # OpenRouter streaming format
-                        if decoded.startswith("data: "):
-                            data_str = decoded.replace("data: ", "").strip()
-
-                            if data_str == "[DONE]":
-                                break
-
-                            try:
-                                import json
-                                json_data = json.loads(data_str)
-                                delta = json_data["choices"][0]["delta"].get("content", "")
-                                if delta:
-                                    yield delta
-                            except Exception:
-                                continue
-
-        except Exception as e:
-            yield f"\n[Streaming Error]: {str(e)}"

@@ -149,11 +149,13 @@ def chat_with_repo(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+from fastapi.responses import StreamingResponse
+
 @router.post("/chat/stream")
 def stream_chat(request: ChatRequest):
     """
-    Copilot-style streaming chat endpoint.
-    Works even during indexing.
+    REAL Copilot-style streaming (token-by-token)
+    Low latency + flush-friendly + UI compatible
     """
     repo_id = request.repo_id
     query = request.query
@@ -169,22 +171,73 @@ def stream_chat(request: ChatRequest):
         vector_store = index_manager.load_or_build_index(repo_name, [])
 
         # RAG Retrieval
-        rag_pipeline = CodebaseRAGPipeline(vector_store=vector_store,embedder=embedder)
+        rag_pipeline = CodebaseRAGPipeline(
+            vector_store=vector_store,
+            embedder=embedder
+        )
         retrieved_chunks = rag_pipeline.get_context(query)
 
-        # Streaming generator
+        # 🔥 TRUE streaming generator (with flush-friendly chunks)
         def token_generator():
-            for token in copilot_engine.stream_response(
-                query=query,
-                retrieved_chunks=retrieved_chunks,
-                repo_name=repo_name
-            ):
-                yield token
+            try:
+                for token in copilot_engine.stream_response(
+                    query=query,
+                    retrieved_chunks=retrieved_chunks,
+                    repo_name=repo_name
+                ):
+                    # Important: small chunks = smoother streaming
+                    yield token
+            except Exception as e:
+                yield f"\n[Streaming Error]: {str(e)}"
 
         return StreamingResponse(
             token_generator(),
-            media_type="text/plain"
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Transfer-Encoding": "chunked",
+            },
         )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+# @router.post("/chat/stream")
+# def stream_chat(request: ChatRequest):
+#     """
+#     Copilot-style streaming chat endpoint.
+#     Works even during indexing.
+#     """
+#     repo_id = request.repo_id
+#     query = request.query
+
+#     if repo_id not in ACTIVE_REPOS:
+#         raise HTTPException(status_code=404, detail="Invalid repo_id. Please ingest repo first.")
+
+#     repo_info = ACTIVE_REPOS[repo_id]
+#     repo_name = repo_info.get("repo_url", "").split("/")[-1]
+
+#     try:
+#         # Load vector store (cached index)
+#         vector_store = index_manager.load_or_build_index(repo_name, [])
+
+#         # RAG Retrieval
+#         rag_pipeline = CodebaseRAGPipeline(vector_store=vector_store,embedder=embedder)
+#         retrieved_chunks = rag_pipeline.get_context(query)
+
+#         # Streaming generator
+#         def token_generator():
+#             for token in copilot_engine.stream_response(
+#                 query=query,
+#                 retrieved_chunks=retrieved_chunks,
+#                 repo_name=repo_name
+#             ):
+#                 yield token
+
+#         return StreamingResponse(
+#             token_generator(),
+#             media_type="text/plain"
+#         )
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
